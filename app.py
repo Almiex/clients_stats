@@ -6,6 +6,7 @@
 """
 import io
 import re
+import altair as alt
 import pandas as pd
 import streamlit as st
 
@@ -40,7 +41,7 @@ def parse_report(file_bytes: bytes) -> tuple[pd.DataFrame, dict, str | None]:
     # чистка мусорных значений специальности из МИС (напр. "В Северном")
     df["specialnost"] = df["specialnost"].replace(
         to_replace=r"(?i).*(СЕВЕРНОМ|КЛИНИКА).*",
-        value="БЕЗ СПЕЦИАЛЬНОСТИ", regex=True)
+        value="ДРУГОЕ", regex=True)
     for c in ["kolichestvo", "cena", "summa"]:
         df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
     return df, meta, clinic
@@ -71,7 +72,7 @@ def agg_by_specialty(df: pd.DataFrame) -> pd.DataFrame:
     revenue = df.groupby("specialnost")["summa"].sum().rename("Выручка")
     piv = piv.merge(revenue, on="specialnost")
     # "БЕЗ СПЕЦИАЛЬНОСТИ" — в конец, чтобы не мешало основному списку
-    piv["_bezz"] = (piv["specialnost"] == "БЕЗ СПЕЦИАЛЬНОСТИ").astype(int)
+    piv["_bezz"] = (piv["specialnost"] == "ДРУГОЕ").astype(int)
     piv = piv.sort_values(["_bezz", "Выручка"], ascending=[True, False])
     return piv.drop(columns="_bezz").reset_index(drop=True)
 
@@ -120,8 +121,46 @@ st.subheader("Доля первичных и повторных приёмов �
 min_visits = st.slider("Скрыть специальности с количеством приёмов меньше:", 0, 200, 0, 10)
 spec_view = spec[spec["Всего"] >= min_visits]
 
-chart_df = spec_view.set_index("specialnost")[["% первичных", "% повторных", "% прочих"]]
-st.bar_chart(chart_df, stack=True, color=["#2e86de", "#f39c12", "#b2bec3"])
+TIP_INFO = {
+    "% первичных": "приёмы со словом «первичный» в названии",
+    "% повторных": "приёмы со словом «повторный» в названии",
+    "% прочих": "ЭВН, перевязки, онлайн-консультации и др. — не относятся к первичным/повторным",
+}
+
+long = spec_view.melt(
+    id_vars=["specialnost", "Выручка", "Всего"],
+    value_vars=["% первичных", "% повторных", "% прочих"],
+    var_name="Тип", value_name="Доля")
+
+chart = (
+    alt.Chart(long)
+    .mark_bar()
+    .encode(
+        x=alt.X("specialnost:N", title=None, sort=None,
+                axis=alt.Axis(labelAngle=-45, labelLimit=180)),
+        y=alt.Y("Доля:Q", stack="zero",
+                axis=alt.Axis(title="Доля, %")),
+        color=alt.Color(
+            "Тип:N",
+            scale=alt.Scale(
+                domain=["% первичных", "% повторных", "% прочих"],
+                range=["#2e86de", "#f39c12", "#b2bec3"]),
+            legend=alt.Legend(title=None, orient="bottom")),
+        tooltip=[
+            alt.Tooltip("specialnost:N", title="Специальность"),
+            alt.Tooltip("Тип:N", title="Тип"),
+            alt.Tooltip("Доля:Q", title="Доля, %", format=".1f"),
+            alt.Tooltip("Всего:Q", title="Приёмов всего", format=",.0f"),
+            alt.Tooltip("Выручка:Q", title="Выручка специальности, ₽", format=",.0f"),
+        ],
+    )
+    .properties(height=420)
+)
+st.altair_chart(chart, use_container_width=True)
+
+with st.expander("📖 Расшифровка легенды", expanded=False):
+    for k, v in TIP_INFO.items():
+        st.markdown(f"- **{k}** — {v}")
 
 left, right = st.columns([3, 2])
 with left:
