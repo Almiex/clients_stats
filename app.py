@@ -37,6 +37,10 @@ def parse_report(file_bytes: bytes) -> tuple[pd.DataFrame, dict, str | None]:
     df = df.dropna(subset=["uslcode"])
     df["usluga"] = df["usluga"].astype(str).str.strip()
     df["specialnost"] = df["specialnost"].astype(str).str.strip().str.upper()
+    # чистка мусорных значений специальности из МИС (напр. "В Северном")
+    df["specialnost"] = df["specialnost"].replace(
+        to_replace=r"(?i).*(СЕВЕРНОМ|КЛИНИКА).*",
+        value="БЕЗ СПЕЦИАЛЬНОСТИ", regex=True)
     for c in ["kolichestvo", "cena", "summa"]:
         df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
     return df, meta, clinic
