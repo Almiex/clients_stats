@@ -70,7 +70,10 @@ def agg_by_specialty(df: pd.DataFrame) -> pd.DataFrame:
     piv["% прочих"] = piv["Прочее"] / piv["Всего"] * 100
     revenue = df.groupby("specialnost")["summa"].sum().rename("Выручка")
     piv = piv.merge(revenue, on="specialnost")
-    return piv.sort_values("Выручка", ascending=False).reset_index(drop=True)
+    # "БЕЗ СПЕЦИАЛЬНОСТИ" — в конец, чтобы не мешало основному списку
+    piv["_bezz"] = (piv["specialnost"] == "БЕЗ СПЕЦИАЛЬНОСТИ").astype(int)
+    piv = piv.sort_values(["_bezz", "Выручка"], ascending=[True, False])
+    return piv.drop(columns="_bezz").reset_index(drop=True)
 
 # ---------- Интерфейс ----------
 
