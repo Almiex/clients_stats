@@ -137,7 +137,7 @@ chart = (
     .mark_bar()
     .encode(
         x=alt.X("specialnost:N", title=None, sort=None,
-                axis=alt.Axis(labelAngle=-45, labelLimit=180)),
+                axis=alt.Axis(labelAngle=-45, labelLimit=180, labelOverlap=False)),
         y=alt.Y("Доля:Q", stack="zero",
                 axis=alt.Axis(title="Доля, %")),
         color=alt.Color(
