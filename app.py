@@ -168,6 +168,7 @@ TIP_INFO = {
     "% повторных": "приёмы со словом «повторный» в названии",
     "% прочих": "ЭВН, перевязки, онлайн-консультации и др. — не относятся к первичным/повторным",
 }
+st.caption("  •  ".join(f"**{k}** — {v}" for k, v in TIP_INFO.items()))
 
 st.markdown("**По количеству приёмов, %**")
 long = spec_view.melt(
@@ -201,11 +202,7 @@ chart = (
 )
 st.altair_chart(chart, use_container_width=True)
 
-with st.expander("📖 Расшифровка легенды", expanded=False):
-    for k, v in TIP_INFO.items():
-        st.markdown(f"- **{k}** — {v}")
-
-st.markdown("**По выручке, %**")
+st.markdown("**Выручка, ₽**")
 rows = []
 for _, r in spec_view.iterrows():
     for pct_col, rev_col in zip(
@@ -227,7 +224,7 @@ chart_rev = (
     .encode(
         x=alt.X("specialnost:N", title=None, sort=None,
                 axis=alt.Axis(labelAngle=-45, labelLimit=180, labelOverlap=False)),
-        y=alt.Y("Доля:Q", stack="zero", axis=alt.Axis(title="Доля выручки, %")),
+        y=alt.Y("Выручка сегмента:Q", stack="zero", axis=alt.Axis(title="Выручка, ₽")),
         color=alt.Color(
             "Тип:N",
             scale=alt.Scale(
@@ -237,7 +234,6 @@ chart_rev = (
         tooltip=[
             alt.Tooltip("specialnost:N", title="Специальность"),
             alt.Tooltip("Тип:N", title="Тип"),
-            alt.Tooltip("Доля:Q", title="Доля выручки, %", format=".1f"),
             alt.Tooltip("Выручка сегмента:Q", title="Выручка сегмента, ₽", format=",.0f"),
             alt.Tooltip("Выручка специальности:Q", title="Выручка специальности, ₽", format=",.0f"),
             alt.Tooltip("Приёмов всего:Q", title="Приёмов всего", format=",.0f"),
@@ -272,15 +268,10 @@ with right:
 st.divider()
 
 # ---------- Динамика по цене / топ услуг ----------
-c1, c2 = st.columns(2)
-with c1:
-    st.subheader("Топ-15 услуг по выручке")
-    top = df.nlargest(15, "summa")[["usluga", "specialnost", "kolichestvo", "cena", "summa"]]
-    top.columns = ["Услуга", "Специальность", "Кол-во", "Цена", "Сумма"]
-    st.dataframe(top, use_container_width=True, hide_index=True)
-with c2:
-    st.subheader("Распределение по специальностям (выручка)")
-    st.bar_chart(spec_view.set_index("specialnost")["Выручка"])
+st.subheader("Топ-15 услуг по выручке")
+top = df.nlargest(15, "summa")[["usluga", "specialnost", "kolichestvo", "cena", "summa"]]
+top.columns = ["Услуга", "Специальность", "Кол-во", "Цена", "Сумма"]
+st.dataframe(top, use_container_width=True, hide_index=True)
 
 st.divider()
 
