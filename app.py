@@ -71,6 +71,24 @@ def agg_by_specialty(df: pd.DataFrame) -> pd.DataFrame:
     piv["% прочих"] = piv["Прочее"] / piv["Всего"] * 100
     revenue = df.groupby("specialnost")["summa"].sum().rename("Выручка")
     piv = piv.merge(revenue, on="specialnost")
+    # выручка по типам приёма
+    rev_tip = (
+        df.pivot_table(index="specialnost", columns="tip",
+                       values="summa", aggfunc="sum", fill_value=0)
+        .reset_index()
+    )
+    for col in ["Первичный", "Повторный", "Прочее"]:
+        if col not in rev_tip.columns:
+            rev_tip[col] = 0
+    rev_tip = rev_tip.rename(columns={
+        "Первичный": "Выручка первичных",
+        "Повторный": "Выручка повторных",
+        "Прочее": "Выручка прочих"})
+    piv = piv.merge(rev_tip, on="specialnost")
+    piv["% выр. первичных"] = piv["Выручка первичных"] / piv["Выручка"].replace(0, pd.NA) * 100
+    piv["% выр. повторных"] = piv["Выручка повторных"] / piv["Выручка"].replace(0, pd.NA) * 100
+    piv["% выр. прочих"] = piv["Выручка прочих"] / piv["Выручка"].replace(0, pd.NA) * 100
+    piv[["% выр. первичных", "% выр. повторных", "% выр. прочих"]] =         piv[["% выр. первичных", "% выр. повторных", "% выр. прочих"]].fillna(0)
     # "БЕЗ СПЕЦИАЛЬНОСТИ" — в конец, чтобы не мешало основному списку
     piv["_bezz"] = (piv["specialnost"] == "ДРУГОЕ").astype(int)
     piv = piv.sort_values(["_bezz", "Выручка"], ascending=[True, False])
@@ -80,12 +98,15 @@ def agg_by_specialty(df: pd.DataFrame) -> pd.DataFrame:
 
 st.title("🏥 Дашборд: выполненные приёмы")
 
-uploaded = st.sidebar.file_uploader("Загрузите отчёт (.xlsx)", type=["xlsx"])
-st.sidebar.caption("Ожидаемый формат: отчёт «Количество выполненных услуг "
-                   "на сумму по убыванию» с колонками USLCODE…кол-во*цена.")
+uploaded = st.file_uploader(
+    "Загрузите отчёт (.xlsx)",
+    type=["xlsx"],
+    help="Ожидаемый формат: отчёт «Количество выполненных услуг "
+         "на сумму по убыванию» с колонками USLCODE…кол-во*цена. "
+         "Период и клиника подставятся из шапки файла.")
 
 if uploaded is None:
-    st.info("Загрузите Excel-отчёт в панели слева, чтобы построить дашборд.")
+    st.info("Загрузите Excel-отчёт выше, чтобы построить дашборд.")
     st.stop()
 
 try:
@@ -99,9 +120,8 @@ spec = agg_by_specialty(df)
 
 # ---------- Шапка: период и KPI ----------
 period = f"{meta.get('date_from', '—')} — {meta.get('date_to', '—')}"
-st.subheader(f"📅 Период: {period}")
-if clinic:
-    st.caption(f"Клиника: {clinic}")
+clinic_txt = clinic if clinic else "—"
+st.subheader(f"📅 Период: {period}    🏥 Клиника: {clinic_txt}")
 
 k1, k2, k3, k4, k5 = st.columns(5)
 k1.metric("Позиций услуг", len(df))
@@ -149,6 +169,7 @@ TIP_INFO = {
     "% прочих": "ЭВН, перевязки, онлайн-консультации и др. — не относятся к первичным/повторным",
 }
 
+st.markdown("**По количеству приёмов, %**")
 long = spec_view.melt(
     id_vars=["specialnost", "Выручка", "Всего"],
     value_vars=["% первичных", "% повторных", "% прочих"],
@@ -184,14 +205,60 @@ with st.expander("📖 Расшифровка легенды", expanded=False):
     for k, v in TIP_INFO.items():
         st.markdown(f"- **{k}** — {v}")
 
+st.markdown("**По выручке, %**")
+rows = []
+for _, r in spec_view.iterrows():
+    for pct_col, rev_col in zip(
+            ["% выр. первичных", "% выр. повторных", "% выр. прочих"],
+            ["Выручка первичных", "Выручка повторных", "Выручка прочих"]):
+        rows.append({
+            "specialnost": r["specialnost"],
+            "Тип": pct_col.replace("выр. ", ""),
+            "Доля": r[pct_col],
+            "Выручка сегмента": r[rev_col],
+            "Выручка специальности": r["Выручка"],
+            "Приёмов всего": r["Всего"],
+        })
+long_rev = pd.DataFrame(rows)
+
+chart_rev = (
+    alt.Chart(long_rev)
+    .mark_bar()
+    .encode(
+        x=alt.X("specialnost:N", title=None, sort=None,
+                axis=alt.Axis(labelAngle=-45, labelLimit=180, labelOverlap=False)),
+        y=alt.Y("Доля:Q", stack="zero", axis=alt.Axis(title="Доля выручки, %")),
+        color=alt.Color(
+            "Тип:N",
+            scale=alt.Scale(
+                domain=["% первичных", "% повторных", "% прочих"],
+                range=["#2e86de", "#f39c12", "#b2bec3"]),
+            legend=None),
+        tooltip=[
+            alt.Tooltip("specialnost:N", title="Специальность"),
+            alt.Tooltip("Тип:N", title="Тип"),
+            alt.Tooltip("Доля:Q", title="Доля выручки, %", format=".1f"),
+            alt.Tooltip("Выручка сегмента:Q", title="Выручка сегмента, ₽", format=",.0f"),
+            alt.Tooltip("Выручка специальности:Q", title="Выручка специальности, ₽", format=",.0f"),
+            alt.Tooltip("Приёмов всего:Q", title="Приёмов всего", format=",.0f"),
+        ],
+    )
+    .properties(height=420)
+)
+st.altair_chart(chart_rev, use_container_width=True)
+
 left, right = st.columns([3, 2])
 with left:
     st.markdown("**Детализация по специальностям**")
     show = spec_view[["specialnost", "Всего", "Первичный", "Повторный", "Прочее",
-                      "% первичных", "% повторных", "Выручка"]].copy()
+                      "% первичных", "% повторных",
+                      "% выр. первичных", "% выр. повторных", "% выр. прочих",
+                      "Выручка"]].copy()
     show.columns = ["Специальность", "Всего", "Первичные", "Повторные", "Прочие",
-                    "% первичных", "% повторных", "Выручка"]
-    for c in ["% первичных", "% повторных"]:
+                    "% первичных", "% повторных",
+                    "% выр. первичных", "% выр. повторных", "% выр. прочих",
+                    "Выручка"]
+    for c in ["% первичных", "% повторных", "% выр. первичных", "% выр. повторных", "% выр. прочих"]:
         show[c] = show[c].map("{:.1f} %".format)
     st.dataframe(show, use_container_width=True, hide_index=True)
 
