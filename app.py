@@ -275,6 +275,26 @@ st.dataframe(top, use_container_width=True, hide_index=True)
 
 st.divider()
 
+# ---------- Топ первичных / повторных ----------
+st.subheader("Топ первичных и повторных услуг")
+t1, t2 = st.columns(2)
+
+def top_table(tip_name):
+    t = (df[df["tip"] == tip_name]
+         .nlargest(10, "kolichestvo")[["usluga", "specialnost", "kolichestvo", "summa"]]
+         .copy())
+    t.columns = ["Услуга", "Специальность", "Кол-во", "Сумма"]
+    return t
+
+with t1:
+    st.markdown("**Топ-10 первичных (по количеству)**")
+    st.dataframe(top_table("Первичный"), use_container_width=True, hide_index=True)
+with t2:
+    st.markdown("**Топ-10 повторных (по количеству)**")
+    st.dataframe(top_table("Повторный"), use_container_width=True, hide_index=True)
+
+st.divider()
+
 # ---------- Выгрузка ----------
 csv = spec.to_csv(index=False).encode("utf-8-sig")
 st.download_button("⬇️ Скачать сводку по специальностям (CSV)", csv,
