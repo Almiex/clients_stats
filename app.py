@@ -118,8 +118,30 @@ st.divider()
 # ---------- Доля первичных/повторных по специальностям ----------
 st.subheader("Доля первичных и повторных приёмов по специальностям")
 
-min_visits = st.slider("Скрыть специальности с количеством приёмов меньше:", 0, 200, 0, 10)
+SORTS = {
+    "Выручка (больше → меньше)": ("Выручка", False),
+    "Количество приёмов (больше → меньше)": ("Всего", False),
+    "% первичных (больше → меньше)": ("% первичных", False),
+    "% повторных (больше → меньше)": ("% повторных", False),
+    "% прочих (больше → меньше)": ("% прочих", False),
+    "Алфавит А → Я": ("specialnost", True),
+    "Алфавит Я → А": ("specialnost", False),
+}
+
+c_slider, c_sort = st.columns([1, 1])
+with c_slider:
+    min_visits = st.slider("Скрыть специальности с количеством приёмов меньше:", 0, 200, 0, 10)
+with c_sort:
+    sort_sel = st.selectbox("Сортировка:", list(SORTS), index=0)
+
 spec_view = spec[spec["Всего"] >= min_visits]
+sort_col, sort_asc = SORTS[sort_sel]
+spec_view = spec_view.sort_values(sort_col, ascending=sort_asc, kind="stable")
+# "ДРУГОЕ" всегда в конце, при любой сортировке
+spec_view = pd.concat([
+    spec_view[spec_view["specialnost"] != "ДРУГОЕ"],
+    spec_view[spec_view["specialnost"] == "ДРУГОЕ"],
+]).reset_index(drop=True)
 
 TIP_INFO = {
     "% первичных": "приёмы со словом «первичный» в названии",
@@ -191,7 +213,7 @@ with c1:
     st.dataframe(top, use_container_width=True, hide_index=True)
 with c2:
     st.subheader("Распределение по специальностям (выручка)")
-    st.bar_chart(spec.set_index("specialnost")["Выручка"])
+    st.bar_chart(spec_view.set_index("specialnost")["Выручка"])
 
 st.divider()
 
